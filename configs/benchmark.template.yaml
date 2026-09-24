@@ -1,0 +1,30 @@
+# Copy this file for each experiment and replace every TODO.
+
+experiment:
+  name: TODO
+  description: TODO
+  seed: 17
+  output_dir: outputs/TODO
+
+dataset:
+  manifest: configs/datasets/dataset.template.yaml
+  features: [x, y, z, ux, uy, uz, time, ekin]
+
+split:
+  train_fraction: TODO
+  validation_fraction: TODO
+  test_fraction: TODO
+
+preprocessing:
+  # Decide these rules before implementing models.
+  log_features: TODO
+  normalize: TODO
+  weight_handling: TODO
+
+metrics:
+  # Example candidates: MMD, Wasserstein distance, KS, physical validity.
+  names: TODO
+  evaluation_samples: TODO
+
+# Add entries only after model implementations are ready.
+models: []

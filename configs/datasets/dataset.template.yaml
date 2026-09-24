@@ -1,0 +1,29 @@
+# Copy this file once for every physical dataset and replace every TODO.
+
+id: TODO
+title: TODO
+
+# reactor | spallation | cans
+source_class: TODO
+
+# transport_exit | before_sample
+benchmark_stage: TODO
+
+# null for source generation; diffraction | sans | ins | tof before a sample
+instrument_class: TODO
+
+facility: TODO
+simulation_code: TODO
+path: ${AISOURCE_DATA}/TODO.mcpl.gz
+
+particle_count: TODO
+sha256: TODO
+license: TODO
+access: TODO
+citation: TODO
+
+plane_description: TODO
+coordinate_system: TODO
+filters: TODO
+weight_description: TODO
+known_limitations: TODO

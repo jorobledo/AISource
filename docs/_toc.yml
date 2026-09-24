@@ -1,0 +1,8 @@
+format: jb-book
+root: index
+chapters:
+  - file: methodology
+  - file: datasets
+  - file: adding-models
+  - file: benchmark-notebook
+

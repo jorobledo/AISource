@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aisource-neutrons"
+version = "0.1.0"
+description = "Benchmarks for generative neutron phase-space models"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{name = "AISource contributors"}]
+keywords = ["neutron", "MCPL", "generative-model", "benchmark"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+  "numpy>=1.24",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+mcpl = ["mcpl>=2.0"]
+viz = ["matplotlib>=3.7"]
+notebooks = ["jupyterlab>=4", "ipykernel>=6", "pandas>=2"]
+docs = ["jupyter-book>=1.0,<2", "sphinxcontrib-bibtex>=2.6"]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6"]
+all = [
+  "mcpl>=2.0",
+  "matplotlib>=3.7",
+  "jupyterlab>=4",
+  "ipykernel>=6",
+  "pandas>=2",
+  "jupyter-book>=1.0,<2",
+  "sphinxcontrib-bibtex>=2.6",
+  "pytest>=8",
+  "pytest-cov>=5",
+  "ruff>=0.6",
+]
+
+[project.scripts]
+aisource = "aisource.cli:main"
+
+[project.urls]
+Repository = "https://github.com/jorobledo/AISource"
+Paper = "https://doi.org/10.1088/2632-2153/ae8d7e"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aisource"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["aisource"]
+branch = true
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]

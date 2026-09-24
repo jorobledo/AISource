@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+dist/
+build/
+
+# Notebooks and documentation builds
+.ipynb_checkpoints/
+docs/_build/
+
+# Benchmark artifacts and large scientific data
+outputs/
+*.mcpl
+*.mcpl.gz
+*.pt
+*.pth
+*.ckpt
+datasets/reference/*
+!datasets/reference/.gitkeep
+pretrained/*
+!pretrained/.gitkeep
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+
