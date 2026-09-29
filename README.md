@@ -20,11 +20,15 @@ implementations and no datasets. We will add these later.
 - Compact accelerator-driven neutron source (CANS), such as HBS
 
 ### Source estimation before the sample
+|            | TOF.  | Continuous source |
+------------------------------------------
+|Diffraction | HB-2A@ORNL | D1B@ILL           |
+|SANS        | GP-SANS @ORNL     | D33@ILL               |
+|INS.        | BIFROST@ESS      | CAMEA@PSI             |
+|Imaging     | ODIN@ESS      | ICON@PSI              |
 
-- Diffraction
-- SANS
-- INS
-- TOF
+
+
 
 ## Structure
 
