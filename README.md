@@ -28,6 +28,16 @@ implementations and no datasets. We will add these later.
 |Imaging | ODIN@ESS | ICON@PSI |
 
 
+## Metrics
+
+Drawing upon inspiration from https://proceedings.mlr.press/v130/lueckmann21a.html a possible list of metrics could be:
+
+1. Classifier 2 sample tests
+2. Maximum Mean Discrepancy (MMD)
+3. KL-divergence after applying Gauss Rank Scaling to an input MCPL file
+
+
+
 
 ## Structure
 
