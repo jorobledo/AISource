@@ -47,7 +47,7 @@ Drawing upon inspiration from https://proceedings.mlr.press/v130/lueckmann21a.ht
 src/aisource/
   models/             model interface; implementations will go here
   benchmark.py        benchmark workflow template
-  metrics.py          metric placeholders
+  metrics.py          multivariate two-sample metrics
   training.py         training-loop placeholder
   visualization.py    plotting placeholder
 
@@ -69,10 +69,20 @@ tests/                tests to extend with each implementation
 
 1. Copy and complete the dataset template.
 2. Agree on the common MCPL features and preprocessing.
-3. Agree on the benchmark metrics and data splits.
+3. Freeze the metric parameters and data splits.
 4. Add one model under `src/aisource/models/`.
 5. Connect that model to `benchmark.py`.
 6. Add tests and document the result.
+
+## Available distribution metrics
+
+`src/aisource/metrics.py` currently provides:
+
+- RBF maximum mean discrepancy (MMD²)
+- classifier two-sample testing (C2ST)
+- multivariate energy distance
+
+See [docs/metrics.md](docs/metrics.md) for interpretation and limitations.
 
 ## Setup
 

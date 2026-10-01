@@ -24,7 +24,7 @@ The protocol is not finalized. Fill in these decisions before comparing models:
 
 ## Evaluation
 
-- Distribution metrics: TODO
+- Distribution metrics: see `metrics.md`
 - Physics checks: TODO
 - Evaluation sample size: TODO
 - Runtime and memory measurements: TODO

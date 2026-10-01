@@ -22,9 +22,14 @@ preprocessing:
   weight_handling: TODO
 
 metrics:
-  # Example candidates: MMD, Wasserstein distance, KS, physical validity.
-  names: TODO
+  names:
+    - mmd_rbf_squared
+    - c2st
+    - energy_distance
   evaluation_samples: TODO
+  seed: 17
+  max_samples: 2000
+  c2st_classifier: logistic
 
 # Add entries only after model implementations are ready.
 models: []
