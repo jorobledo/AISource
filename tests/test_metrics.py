@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from aisource.metrics import (
+    Metrics,
     c2st,
     energy_distance,
     evaluate,
@@ -69,3 +70,33 @@ def test_metrics_reject_invalid_shapes():
         mmd_rbf(np.ones((10, 2)), np.ones((10, 3)))
     with pytest.raises(ValueError, match="finite"):
         energy_distance(np.array([[0.0], [np.nan]]), np.ones((2, 1)))
+
+
+def test_metrics_class_supports_bound_and_per_call_samples(samples):
+    reference, matching, shifted = samples
+    metrics = Metrics(reference, matching, seed=2, max_samples=300)
+
+    assert metrics.evaluate("mmd") == mmd_rbf(reference, matching, seed=2, max_samples=300)
+    assert metrics.evaluate("energy", reference, shifted) == energy_distance(
+        reference, shifted, seed=2, max_samples=300
+    )
+
+    unbound = Metrics(seed=4, max_samples=200)
+    assert unbound.evaluate("c2st", reference, shifted)["accuracy"] > 0.75
+    assert set(unbound.evaluate_all(reference, matching)) == {
+        "mmd_rbf_squared",
+        "c2st_accuracy",
+        "c2st_roc_auc",
+        "c2st_pvalue",
+        "energy_distance",
+    }
+
+
+def test_metrics_class_reports_missing_samples_and_unknown_metrics(samples):
+    reference, matching, _ = samples
+    with pytest.raises(ValueError, match="provided together"):
+        Metrics(reference)
+    with pytest.raises(ValueError, match="must be supplied"):
+        Metrics().evaluate("mmd")
+    with pytest.raises(ValueError, match="unknown metric"):
+        Metrics(reference, matching).evaluate("not-a-metric")

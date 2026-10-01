@@ -13,6 +13,16 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from scipy.stats import binomtest
 
+_METRIC_ALIASES = {
+    "mmd": "mmd_rbf",
+    "mmd_rbf": "mmd_rbf",
+    "mmd_rbf_squared": "mmd_rbf",
+    "c2st": "c2st",
+    "energy": "energy_distance",
+    "energy_distance": "energy_distance",
+    "all": "all",
+}
+
 
 def _validate_samples(
     reference: np.ndarray,
@@ -248,9 +258,7 @@ def evaluate(
         seed=seed,
     )
     return {
-        "mmd_rbf_squared": mmd_rbf(
-            reference, generated, max_samples=max_samples, seed=seed
-        ),
+        "mmd_rbf_squared": mmd_rbf(reference, generated, max_samples=max_samples, seed=seed),
         "c2st_accuracy": classifier_result["accuracy"],
         "c2st_roc_auc": classifier_result["roc_auc"],
         "c2st_pvalue": classifier_result["pvalue"],
@@ -258,3 +266,89 @@ def evaluate(
             reference, generated, max_samples=max_samples, seed=seed
         ),
     }
+
+
+class Metrics:
+    """Dispatch distribution metrics for a pair of multivariate samples.
+
+    Samples can either be bound to the instance::
+
+        metrics = Metrics(reference, generated)
+        result = metrics.evaluate("mmd")
+
+    or supplied for each evaluation::
+
+        metrics = Metrics()
+        result = metrics.evaluate("mmd", reference, generated)
+
+    Parameters passed to :meth:`evaluate` are forwarded to the selected metric.
+    ``seed`` and ``max_samples`` provide consistent defaults across calls, and
+    can also be overridden for an individual evaluation.
+    """
+
+    available_metrics = ("mmd_rbf", "c2st", "energy_distance", "all")
+
+    def __init__(
+        self,
+        reference: np.ndarray | None = None,
+        generated: np.ndarray | None = None,
+        *,
+        seed: int = 17,
+        max_samples: int | None = 2_000,
+    ) -> None:
+        if (reference is None) != (generated is None):
+            raise ValueError("reference and generated must be provided together")
+        if reference is not None and generated is not None:
+            reference, generated = _validate_samples(reference, generated)
+        self.reference = reference
+        self.generated = generated
+        self.seed = seed
+        self.max_samples = max_samples
+
+    def evaluate(
+        self,
+        metric: str,
+        reference: np.ndarray | None = None,
+        generated: np.ndarray | None = None,
+        **kwargs: Any,
+    ) -> float | dict[str, float] | dict[str, Any]:
+        """Evaluate ``metric`` for the supplied or instance-bound samples.
+
+        Supported names are ``"mmd"``/``"mmd_rbf"``, ``"c2st"``,
+        ``"energy"``/``"energy_distance"``, and ``"all"``.
+        """
+
+        reference = self.reference if reference is None else reference
+        generated = self.generated if generated is None else generated
+        if reference is None or generated is None:
+            raise ValueError("reference and generated must be supplied to Metrics or evaluate")
+        if not isinstance(metric, str):
+            raise TypeError("metric must be a string")
+        normalized = metric.lower().replace("-", "_")
+        try:
+            selected = _METRIC_ALIASES[normalized]
+        except KeyError as error:
+            choices = ", ".join(self.available_metrics)
+            raise ValueError(f"unknown metric {metric!r}; choose one of: {choices}") from error
+
+        kwargs.setdefault("seed", self.seed)
+        kwargs.setdefault("max_samples", self.max_samples)
+        if selected == "mmd_rbf":
+            return mmd_rbf(reference, generated, **kwargs)
+        if selected == "c2st":
+            return c2st(reference, generated, **kwargs)
+        if selected == "energy_distance":
+            return energy_distance(reference, generated, **kwargs)
+        return evaluate(reference, generated, **kwargs)
+
+    def evaluate_all(
+        self,
+        reference: np.ndarray | None = None,
+        generated: np.ndarray | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Evaluate the complete metric suite."""
+
+        result = self.evaluate("all", reference, generated, **kwargs)
+        assert isinstance(result, dict)
+        return result
