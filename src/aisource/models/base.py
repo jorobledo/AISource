@@ -6,9 +6,11 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-class Particle():
-    
-    def __init__(self, phase_space_dict, particle_type):
+
+class Particle:
+    """Describe the phase-space features associated with a particle type."""
+
+    def __init__(self, phase_space_dict: dict[str, object], particle_type: str) -> None:
         self.phase_space_dict = phase_space_dict
         self.training_phase_space = list(phase_space_dict.keys())
         self.ndim = len(self.training_phase_space)
@@ -18,10 +20,10 @@ class Particle():
 class BaseGenerator(ABC):
     """Contract shared by future model implementations."""
 
-    def __init__(self, Particle):
-        self.ndim = Particle.ndim
-        self.Particle = Particle
-        
+    def __init__(self, particle: Particle) -> None:
+        self.ndim = particle.ndim
+        self.Particle = particle
+
     @abstractmethod
     def fit(self, train: np.ndarray, validation: np.ndarray | None = None) -> None:
         """Fit the model on the training split only."""

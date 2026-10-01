@@ -1,5 +1,5 @@
 """Model contracts. Concrete models will be added here later."""
 
-from .base import BaseGenerator
+from .base import BaseGenerator, Particle
 
-__all__ = ["BaseGenerator"]
+__all__ = ["BaseGenerator", "Particle"]
