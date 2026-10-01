@@ -35,6 +35,8 @@ Drawing upon inspiration from https://proceedings.mlr.press/v130/lueckmann21a.ht
 1. Classifier 2 sample tests
 2. Maximum Mean Discrepancy (MMD)
 3. KL-divergence after applying Gauss Rank Scaling to an input MCPL file
+4. KS statistic in multivariate
+5. Kernelized Stein discrepancy (KSD) (Maybe)
 
 
 
