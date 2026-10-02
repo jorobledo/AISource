@@ -2,6 +2,10 @@
 
 Distance-based metrics use a pooled standardization by default so that MCPL
 features with different units do not dominate solely because of their scale.
+
+All samples are arrays shaped ``(particles, parameters)``: rows are particles
+and columns are parameters. Reference and generated samples may contain
+different numbers of particles but must have the same parameters.
 """
 
 from __future__ import annotations
@@ -11,6 +15,7 @@ from typing import Any, Literal
 
 import numpy as np
 from scipy.spatial.distance import cdist
+from scipy.special import ndtri
 from scipy.stats import binomtest
 
 _METRIC_ALIASES = {
@@ -20,6 +25,8 @@ _METRIC_ALIASES = {
     "c2st": "c2st",
     "energy": "energy_distance",
     "energy_distance": "energy_distance",
+    "kld": "kl_divergence",
+    "kl_divergence": "kl_divergence",
     "all": "all",
 }
 
@@ -239,6 +246,73 @@ def energy_distance(
     return float(np.sqrt(squared))
 
 
+def gauss_rank_transform(reference: np.ndarray, values: np.ndarray) -> np.ndarray:
+    """Map every feature of ``values`` to a standard normal using ``reference``.
+
+    The empirical CDF of each reference feature gives uniform scores (mid-ranks
+    for ties, kept strictly inside (0, 1)), which the inverse normal CDF maps to
+    Gaussian values.
+    """
+
+    count = len(reference)
+    transformed = np.empty_like(values, dtype=np.float64)
+    for column in range(values.shape[1]):
+        ordered = np.sort(reference[:, column])
+        below = np.searchsorted(ordered, values[:, column], side="left")
+        at_or_below = np.searchsorted(ordered, values[:, column], side="right")
+        uniform = 0.5 * (below + at_or_below) / count
+        transformed[:, column] = ndtri(np.clip(uniform, 0.5 / count, 1.0 - 0.5 / count))
+    return transformed
+
+
+def _gaussian_fit(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    mean = values.mean(axis=0)
+    centered = values - mean
+    return mean, centered.T @ centered / (len(values) - 1)
+
+
+def kl_divergence(
+    reference: np.ndarray,
+    generated: np.ndarray,
+    *,
+    max_samples: int | None = None,
+    seed: int = 17,
+) -> float:
+    """Return KL(reference || generated) in nats after Gauss rank transformation.
+
+    Both samples are transformed with the empirical CDFs of the reference, a
+    multivariate Gaussian is fitted to each, and the closed-form Gaussian KL
+    divergence is evaluated. The covariance matrices are ``(parameters,
+    parameters)``, so each sample needs more particles than parameters.
+    """
+
+    reference, generated = _prepare_pair(
+        reference,
+        generated,
+        max_samples=max_samples,
+        seed=seed,
+        standardize=False,
+    )
+    transformed_reference = gauss_rank_transform(reference, reference)
+    transformed_generated = gauss_rank_transform(reference, generated)
+
+    dimension = reference.shape[1]
+    mean_p, cov_p = _gaussian_fit(transformed_reference)
+    mean_q, cov_q = _gaussian_fit(transformed_generated)
+    if np.linalg.matrix_rank(cov_p) < dimension or np.linalg.matrix_rank(cov_q) < dimension:
+        raise ValueError(
+            "covariance matrix is singular; use more particles than parameters "
+            "and avoid perfectly collinear parameters"
+        )
+    _, logdet_p = np.linalg.slogdet(cov_p)
+    _, logdet_q = np.linalg.slogdet(cov_q)
+
+    delta = mean_p - mean_q
+    trace = np.trace(np.linalg.solve(cov_q, cov_p))
+    mahalanobis = delta @ np.linalg.solve(cov_q, delta)
+    return float(0.5 * (trace + mahalanobis - dimension + logdet_q - logdet_p))
+
+
 def evaluate(
     reference: np.ndarray,
     generated: np.ndarray,
@@ -265,6 +339,7 @@ def evaluate(
         "energy_distance": energy_distance(
             reference, generated, max_samples=max_samples, seed=seed
         ),
+        "kl_divergence": kl_divergence(reference, generated, max_samples=max_samples, seed=seed),
     }
 
 
@@ -286,7 +361,7 @@ class Metrics:
     can also be overridden for an individual evaluation.
     """
 
-    available_metrics = ("mmd_rbf", "c2st", "energy_distance", "all")
+    available_metrics = ("mmd_rbf", "c2st", "energy_distance", "kl_divergence", "all")
 
     def __init__(
         self,
@@ -315,7 +390,8 @@ class Metrics:
         """Evaluate ``metric`` for the supplied or instance-bound samples.
 
         Supported names are ``"mmd"``/``"mmd_rbf"``, ``"c2st"``,
-        ``"energy"``/``"energy_distance"``, and ``"all"``.
+        ``"energy"``/``"energy_distance"``, ``"kld"``/``"kl_divergence"``, and
+        ``"all"``.
         """
 
         reference = self.reference if reference is None else reference
@@ -339,6 +415,8 @@ class Metrics:
             return c2st(reference, generated, **kwargs)
         if selected == "energy_distance":
             return energy_distance(reference, generated, **kwargs)
+        if selected == "kl_divergence":
+            return kl_divergence(reference, generated, **kwargs)
         return evaluate(reference, generated, **kwargs)
 
     def evaluate_all(
