@@ -9,6 +9,7 @@ particle. No per-parameter or projection-based metrics are included.
 | RBF MMD² | Kernel discrepancy | Lower means closer joint distributions |
 | C2ST | Cross-validated accuracy, ROC AUC, p-value | Accuracy and AUC near 0.5 mean the classifier cannot distinguish the samples |
 | Energy distance | Multivariate sample distance | Lower means closer joint distributions |
+| KL divergence | Gaussian KL divergence in nats after Gauss rank transformation | 0 means identical fitted Gaussians; lower is closer |
 
 MMD and energy distance use pooled feature standardization by default. This
 prevents a parameter from dominating merely because of its unit scale. The
@@ -49,7 +50,7 @@ The theory behind the KLD is here briefly explained based on [this article](http
 
 
 For two empirical samples from multivariate gaussian distributions, $P$ and $Q$ , the KLD can be calculated as 
-$D_{KL}(P||Q) = \frac{1}{2}\left(\text{tr}(\Sigma_2^{-1}\Sigma_1) + (\mu_1 - \mu_2)^T\Sigma_2^{-1}(]mu_1-\mu_2) - k + \log\left(\frac{|\Sigma_2|}{|\Sigma_1|}\right)\right)$
+$D_{KL}(P||Q) = \frac{1}{2}\left(\text{tr}(\Sigma_2^{-1}\Sigma_1) + (\mu_1 - \mu_2)^T\Sigma_2^{-1}(\mu_1-\mu_2) - k + \log\left(\frac{|\Sigma_2|}{|\Sigma_1|}\right)\right)$
 
 where $\Sigma_i$ is the covariance matrix of the $i$'th distribution, and $\mu_i$ is the mean vector of the $i$'th distribution.
 
@@ -65,8 +66,19 @@ Where $\mu$ is calculated as,
 
 $\mu = \frac{1}{n} \sum^n_i x_i$
 
-which is then the mean vector. In the above, $X$ is the collection of all vectors, whereas $x_i$ is a specific sampled vector. 
+which is then the mean vector. In the above, $X$ is the collection of all vectors, whereas $x_i$ is a specific sampled vector.
 
+### Usage
 
+```python
+from aisource.metrics import Metrics, kl_divergence
 
+kld = kl_divergence(reference_particles, generated_particles)
+kld = Metrics(reference_particles, generated_particles).evaluate("kld")
+```
 
+Both samples are transformed with the empirical CDFs of the reference sample,
+so differences in the marginals and in the correlations both contribute to the
+divergence. A small `regularization` is added to the covariance diagonals so
+the matrices stay invertible. The divergence is selected by name (`"kld"` or
+`"kl_divergence"`) and is not part of the `"all"` suite returned by `evaluate`.

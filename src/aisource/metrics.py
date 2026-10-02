@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 import numpy as np
 from scipy.spatial.distance import cdist
+from scipy.special import ndtri
 from scipy.stats import binomtest
 
 _METRIC_ALIASES = {
@@ -20,6 +21,8 @@ _METRIC_ALIASES = {
     "c2st": "c2st",
     "energy": "energy_distance",
     "energy_distance": "energy_distance",
+    "kld": "kl_divergence",
+    "kl_divergence": "kl_divergence",
     "all": "all",
 }
 
@@ -239,6 +242,70 @@ def energy_distance(
     return float(np.sqrt(squared))
 
 
+def gauss_rank_transform(reference: np.ndarray, values: np.ndarray) -> np.ndarray:
+    """Map every feature of ``values`` to a standard normal using ``reference``.
+
+    The empirical CDF of each reference feature gives uniform scores (mid-ranks
+    for ties, kept strictly inside (0, 1)), which the inverse normal CDF maps to
+    Gaussian values.
+    """
+
+    count = len(reference)
+    transformed = np.empty_like(values, dtype=np.float64)
+    for column in range(values.shape[1]):
+        ordered = np.sort(reference[:, column])
+        below = np.searchsorted(ordered, values[:, column], side="left")
+        at_or_below = np.searchsorted(ordered, values[:, column], side="right")
+        uniform = 0.5 * (below + at_or_below) / count
+        transformed[:, column] = ndtri(np.clip(uniform, 0.5 / count, 1.0 - 0.5 / count))
+    return transformed
+
+
+def kl_divergence(
+    reference: np.ndarray,
+    generated: np.ndarray,
+    *,
+    regularization: float = 1e-6,
+    max_samples: int | None = None,
+    seed: int = 17,
+) -> float:
+    """Return KL(reference || generated) in nats after Gauss rank transformation.
+
+    Both samples are transformed with the empirical CDFs of the reference, a
+    multivariate Gaussian is fitted to each, and the closed-form Gaussian KL
+    divergence is evaluated. ``regularization`` is added to the diagonal of both
+    covariance matrices.
+    """
+
+    reference, generated = _prepare_pair(
+        reference,
+        generated,
+        max_samples=max_samples,
+        seed=seed,
+        standardize=False,
+    )
+    if regularization < 0:
+        raise ValueError("regularization must be non-negative")
+    transformed_reference = gauss_rank_transform(reference, reference)
+    transformed_generated = gauss_rank_transform(reference, generated)
+
+    dimension = reference.shape[1]
+    identity = np.eye(dimension)
+    mean_p = transformed_reference.mean(axis=0)
+    mean_q = transformed_generated.mean(axis=0)
+    cov_p = np.atleast_2d(np.cov(transformed_reference, rowvar=False))
+    cov_q = np.atleast_2d(np.cov(transformed_generated, rowvar=False))
+    cov_p = cov_p + regularization * identity
+    cov_q = cov_q + regularization * identity
+
+    delta = mean_p - mean_q
+    trace = np.trace(np.linalg.solve(cov_q, cov_p))
+    mahalanobis = delta @ np.linalg.solve(cov_q, delta)
+    _, logdet_p = np.linalg.slogdet(cov_p)
+    _, logdet_q = np.linalg.slogdet(cov_q)
+    return float(0.5 * (trace + mahalanobis - dimension + logdet_q - logdet_p))
+
+
 def evaluate(
     reference: np.ndarray,
     generated: np.ndarray,
@@ -286,7 +353,7 @@ class Metrics:
     can also be overridden for an individual evaluation.
     """
 
-    available_metrics = ("mmd_rbf", "c2st", "energy_distance", "all")
+    available_metrics = ("mmd_rbf", "c2st", "energy_distance", "kl_divergence", "all")
 
     def __init__(
         self,
@@ -315,7 +382,8 @@ class Metrics:
         """Evaluate ``metric`` for the supplied or instance-bound samples.
 
         Supported names are ``"mmd"``/``"mmd_rbf"``, ``"c2st"``,
-        ``"energy"``/``"energy_distance"``, and ``"all"``.
+        ``"energy"``/``"energy_distance"``, ``"kld"``/``"kl_divergence"``, and
+        ``"all"``. ``"all"`` does not include the KL divergence.
         """
 
         reference = self.reference if reference is None else reference
@@ -339,6 +407,8 @@ class Metrics:
             return c2st(reference, generated, **kwargs)
         if selected == "energy_distance":
             return energy_distance(reference, generated, **kwargs)
+        if selected == "kl_divergence":
+            return kl_divergence(reference, generated, **kwargs)
         return evaluate(reference, generated, **kwargs)
 
     def evaluate_all(
