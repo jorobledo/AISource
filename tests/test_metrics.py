@@ -62,6 +62,7 @@ def test_evaluate_returns_documented_suite(samples):
         "c2st_roc_auc",
         "c2st_pvalue",
         "energy_distance",
+        "kl_divergence",
     }
 
 
@@ -91,6 +92,7 @@ def test_metrics_class_supports_bound_and_per_call_samples(samples):
         "c2st_roc_auc",
         "c2st_pvalue",
         "energy_distance",
+        "kl_divergence",
     }
 
 
@@ -138,5 +140,13 @@ def test_metrics_class_dispatches_kl_divergence(samples):
     assert metrics.evaluate("kl_divergence", reference, shifted) == kl_divergence(
         reference, shifted
     )
-    with pytest.raises(ValueError, match="regularization"):
-        kl_divergence(reference, matching, regularization=-1.0)
+
+
+def test_kl_divergence_rejects_singular_covariance():
+    rng = np.random.default_rng(3)
+    collinear = rng.normal(size=(100, 3))
+    collinear[:, 2] = collinear[:, 0]
+    with pytest.raises(ValueError, match="singular"):
+        kl_divergence(collinear, collinear)
+    with pytest.raises(ValueError, match="singular"):
+        kl_divergence(rng.normal(size=(3, 5)), rng.normal(size=(3, 5)))

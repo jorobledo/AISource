@@ -1,7 +1,7 @@
 # Multivariate distribution metrics
 
 `aisource.metrics` compares complete particle vectors shaped
-`(particles, parameters)`. The target use case is five to ten parameters per
+`(particles, parameters)`: rows are particles and columns are parameters. The target use case is five to ten parameters per
 particle. No per-parameter or projection-based metrics are included.
 
 | Metric | Output | Interpretation |
@@ -67,18 +67,3 @@ Where $\mu$ is calculated as,
 $\mu = \frac{1}{n} \sum^n_i x_i$
 
 which is then the mean vector. In the above, $X$ is the collection of all vectors, whereas $x_i$ is a specific sampled vector.
-
-### Usage
-
-```python
-from aisource.metrics import Metrics, kl_divergence
-
-kld = kl_divergence(reference_particles, generated_particles)
-kld = Metrics(reference_particles, generated_particles).evaluate("kld")
-```
-
-Both samples are transformed with the empirical CDFs of the reference sample,
-so differences in the marginals and in the correlations both contribute to the
-divergence. A small `regularization` is added to the covariance diagonals so
-the matrices stay invertible. The divergence is selected by name (`"kld"` or
-`"kl_divergence"`) and is not part of the `"all"` suite returned by `evaluate`.

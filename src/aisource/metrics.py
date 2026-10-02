@@ -2,6 +2,10 @@
 
 Distance-based metrics use a pooled standardization by default so that MCPL
 features with different units do not dominate solely because of their scale.
+
+All samples are arrays shaped ``(particles, parameters)``: rows are particles
+and columns are parameters. Reference and generated samples may contain
+different numbers of particles but must have the same parameters.
 """
 
 from __future__ import annotations
@@ -261,11 +265,16 @@ def gauss_rank_transform(reference: np.ndarray, values: np.ndarray) -> np.ndarra
     return transformed
 
 
+def _gaussian_fit(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    mean = values.mean(axis=0)
+    centered = values - mean
+    return mean, centered.T @ centered / (len(values) - 1)
+
+
 def kl_divergence(
     reference: np.ndarray,
     generated: np.ndarray,
     *,
-    regularization: float = 1e-6,
     max_samples: int | None = None,
     seed: int = 17,
 ) -> float:
@@ -273,8 +282,8 @@ def kl_divergence(
 
     Both samples are transformed with the empirical CDFs of the reference, a
     multivariate Gaussian is fitted to each, and the closed-form Gaussian KL
-    divergence is evaluated. ``regularization`` is added to the diagonal of both
-    covariance matrices.
+    divergence is evaluated. The covariance matrices are ``(parameters,
+    parameters)``, so each sample needs more particles than parameters.
     """
 
     reference, generated = _prepare_pair(
@@ -284,25 +293,23 @@ def kl_divergence(
         seed=seed,
         standardize=False,
     )
-    if regularization < 0:
-        raise ValueError("regularization must be non-negative")
     transformed_reference = gauss_rank_transform(reference, reference)
     transformed_generated = gauss_rank_transform(reference, generated)
 
     dimension = reference.shape[1]
-    identity = np.eye(dimension)
-    mean_p = transformed_reference.mean(axis=0)
-    mean_q = transformed_generated.mean(axis=0)
-    cov_p = np.atleast_2d(np.cov(transformed_reference, rowvar=False))
-    cov_q = np.atleast_2d(np.cov(transformed_generated, rowvar=False))
-    cov_p = cov_p + regularization * identity
-    cov_q = cov_q + regularization * identity
+    mean_p, cov_p = _gaussian_fit(transformed_reference)
+    mean_q, cov_q = _gaussian_fit(transformed_generated)
+    if np.linalg.matrix_rank(cov_p) < dimension or np.linalg.matrix_rank(cov_q) < dimension:
+        raise ValueError(
+            "covariance matrix is singular; use more particles than parameters "
+            "and avoid perfectly collinear parameters"
+        )
+    _, logdet_p = np.linalg.slogdet(cov_p)
+    _, logdet_q = np.linalg.slogdet(cov_q)
 
     delta = mean_p - mean_q
     trace = np.trace(np.linalg.solve(cov_q, cov_p))
     mahalanobis = delta @ np.linalg.solve(cov_q, delta)
-    _, logdet_p = np.linalg.slogdet(cov_p)
-    _, logdet_q = np.linalg.slogdet(cov_q)
     return float(0.5 * (trace + mahalanobis - dimension + logdet_q - logdet_p))
 
 
@@ -332,6 +339,7 @@ def evaluate(
         "energy_distance": energy_distance(
             reference, generated, max_samples=max_samples, seed=seed
         ),
+        "kl_divergence": kl_divergence(reference, generated, max_samples=max_samples, seed=seed),
     }
 
 
@@ -383,7 +391,7 @@ class Metrics:
 
         Supported names are ``"mmd"``/``"mmd_rbf"``, ``"c2st"``,
         ``"energy"``/``"energy_distance"``, ``"kld"``/``"kl_divergence"``, and
-        ``"all"``. ``"all"`` does not include the KL divergence.
+        ``"all"``.
         """
 
         reference = self.reference if reference is None else reference
