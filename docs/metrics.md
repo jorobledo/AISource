@@ -1,7 +1,7 @@
 # Multivariate distribution metrics
 
 `aisource.metrics` compares complete particle vectors shaped
-`(particles, parameters)`: rows are particles and columns are parameters. The target use case is five to ten parameters per
+`(particles, parameters)`: rows are particles and columns are parameters. The target use case is five to thirteen parameters per
 particle. No per-parameter or projection-based metrics are included.
 
 | Metric | Output | Interpretation |
