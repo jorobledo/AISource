@@ -24,7 +24,6 @@ class BaseGenerator(ABC):
     def __init__(self, particle: Particle, seed: int | None = None) -> None:
         self.ndim = particle.ndim
         self.Particle = particle
-        self.generator = torch.Generator(device=self.device).
         if seed is not None:
             self.seed = seed
             torch.manual_seed(self.seed)
