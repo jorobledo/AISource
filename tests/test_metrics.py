@@ -150,3 +150,12 @@ def test_kl_divergence_rejects_singular_covariance():
         kl_divergence(collinear, collinear)
     with pytest.raises(ValueError, match="singular"):
         kl_divergence(rng.normal(size=(3, 5)), rng.normal(size=(3, 5)))
+
+
+def test_kl_divergence_in_original_space_matches_gaussian_closed_form():
+    rng = np.random.default_rng(3)
+    reference = rng.normal(size=(4000, 3))
+    shifted = rng.normal(loc=0.5, size=(4000, 3))
+    assert kl_divergence(reference, shifted, space="original") == pytest.approx(0.375, abs=0.1)
+    with pytest.raises(ValueError, match="space"):
+        kl_divergence(reference, shifted, space="uniform")

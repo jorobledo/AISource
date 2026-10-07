@@ -14,6 +14,7 @@ import warnings
 from typing import Any, Literal
 
 import numpy as np
+from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
 from scipy.special import ndtri
 from scipy.stats import binomtest
@@ -271,19 +272,44 @@ def _gaussian_fit(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return mean, centered.T @ centered / (len(values) - 1)
 
 
+def _knn_kl_divergence(reference: np.ndarray, generated: np.ndarray) -> float:
+    count, dimension = reference.shape
+    to_reference = cKDTree(reference).query(reference, k=2)[0][:, 1]
+    to_generated = cKDTree(generated).query(reference, k=1)[0]
+    if (to_reference == 0).any() or (to_generated == 0).any():
+        raise ValueError(
+            "samples contain duplicate particles; the nearest-neighbour estimator needs "
+            "distinct particles"
+        )
+    log_ratio = np.log(to_generated / to_reference).mean()
+    return float(dimension * log_ratio + np.log(len(generated) / (count - 1)))
+
+
 def kl_divergence(
     reference: np.ndarray,
     generated: np.ndarray,
     *,
     max_samples: int | None = None,
     seed: int = 17,
+    space: Literal["gaussian", "original"] = "gaussian",
 ) -> float:
-    """Return KL(reference || generated) in nats after Gauss rank transformation.
+    """Return KL(reference || generated) in nats.
 
-    Both samples are transformed with the empirical CDFs of the reference, a
-    multivariate Gaussian is fitted to each, and the closed-form Gaussian KL
-    divergence is evaluated. The covariance matrices are ``(parameters,
-    parameters)``, so each sample needs more particles than parameters.
+    With ``space="gaussian"`` both samples are transformed with the empirical
+    CDFs of the reference, a multivariate Gaussian is fitted to each, and the
+    closed-form Gaussian KL divergence is evaluated. The covariance matrices are
+    ``(parameters, parameters)``, so each sample needs more particles than
+    parameters.
+
+    With ``space="original"`` the divergence is estimated directly from the
+    untransformed samples with the 1-nearest-neighbour estimator of
+    F. Pérez-Cruz, "Kullback-Leibler Divergence Estimation of Continuous
+    Distributions", IEEE ISIT 2008, doi:10.1109/ISIT.2008.4595271. Section II of
+    the paper (the one-dimensional estimator) is implemented in
+    https://github.com/pedroharunari/KLD_estimation; this is the multivariate
+    estimator of Section III. Sampling in the original space may be slow, as it
+    needs a nearest-neighbour search for every reference particle; use
+    ``max_samples`` to limit the cost.
     """
 
     reference, generated = _prepare_pair(
@@ -293,6 +319,10 @@ def kl_divergence(
         seed=seed,
         standardize=False,
     )
+    if space == "original":
+        return _knn_kl_divergence(reference, generated)
+    if space != "gaussian":
+        raise ValueError("space must be 'gaussian' or 'original'")
     transformed_reference = gauss_rank_transform(reference, reference)
     transformed_generated = gauss_rank_transform(reference, generated)
 
