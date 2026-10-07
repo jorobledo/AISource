@@ -144,8 +144,8 @@ class ContinuousFlowMatching(BaseGenerator):
         self.val_losses: list[tuple[int, float]] = []
 
     def fit(self, train: np.ndarray, validation: np.ndarray) -> None:
-        train = self._check(train)
-        validation = self._check(validation)
+        train = self._check_input_array(train)
+        validation = self._check_input_array(validation)
 
         self.transform = GaussRankTransform().fit(train)
         train_x = self._to_tensor(self.transform.transform(train))
