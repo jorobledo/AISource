@@ -127,7 +127,7 @@ class ContinuousFlowMatching(BaseGenerator):
         device: str = "cpu",
         seed: int | None = None,
     ) -> None:
-        super().__init__(particle, seed)
+        super().__init__(particle, device, seed)
         self.width = width
         self.depth = depth
         self.sampling_steps = sampling_steps
