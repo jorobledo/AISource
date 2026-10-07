@@ -39,10 +39,12 @@ class BaseGenerator(ABC):
     def _check_input_array(self, values: np.ndarray) -> np.ndarray:
         values = np.asarray(values, dtype=np.float64)
         if values.ndim != 2 or values.shape[1] != self.ndim:
-            raise ValueError(f"expected an array with shape (n, {self.ndim}), instead got {values.shape}")
+            raise ValueError(
+                f"expected an array with shape (n, {self.ndim}), instead got {values.shape}"
+            )
         if not np.isfinite(values).all():
             raise ValueError("data must contain only finite values")
         return values
-    
+
     def _to_tensor(self, values: np.ndarray) -> torch.Tensor:
         return torch.as_tensor(values, dtype=torch.float32, device=self.device)
