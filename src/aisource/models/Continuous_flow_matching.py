@@ -91,9 +91,7 @@ def flow_matching_loss(
     return ((v_pred - (x1 - x0)) ** 2).mean(dim=-1).mean()
 
 
-def sample_time(
-    batch_size: int, device: torch.device | str
-) -> torch.Tensor:
+def sample_time(batch_size: int, device: torch.device | str) -> torch.Tensor:
     """Draw training times: 70% uniform, 20% near one, 10% near zero."""
 
     def uniform() -> torch.Tensor:
@@ -112,7 +110,7 @@ class ContinuousFlowMatching(BaseGenerator):
     EMA network every ``eval_every`` steps, and keeps the best EMA weights.
     Training and validation losses are stored in ``losses`` and ``val_losses``.
 
-    Without a ``validation`` array, ``val_size`` rows (at most a tenth of the
+    Without a ``validation`` array, rows (at most a tenth of the
     training rows) are held out from ``train``.
     """
 
@@ -122,28 +120,24 @@ class ContinuousFlowMatching(BaseGenerator):
         *,
         width: int = 64,
         depth: int = 3,
-        n_steps: int = 64,
+        sampling_steps: int = 64,
         steps: int = 10_000,
         lr: float = 1e-3,
         batch_size: int = 3_000,
-        val_size: int = 100_000,
         ema_decay: float = 0.999,
         eval_every: int = 1_000,
-        gauss_rank: bool = True,
         device: str = "cpu",
-        seed: int = 17,
+        seed: int | None = None,
     ) -> None:
         super().__init__(particle)
         self.width = width
         self.depth = depth
-        self.n_steps = n_steps
+        self.sampling_steps = sampling_steps
         self.steps = steps
         self.lr = lr
         self.batch_size = batch_size
-        self.val_size = val_size
         self.ema_decay = ema_decay
         self.eval_every = eval_every
-        self.gauss_rank = gauss_rank
         self.device = device
         self.seed = seed
         self.losses: list[float] = []
@@ -154,8 +148,8 @@ class ContinuousFlowMatching(BaseGenerator):
         validation = self._check(validation)
 
         self.transform = GaussRankTransform().fit(train)
-        train_x = self._to_tensor(self._forward(train))
-        val_x1 = self._to_tensor(self._forward(validation))
+        train_x = self._to_tensor(self.transform.transform(train))
+        val_x1 = self._to_tensor(self.transform.transform(validation))
 
         model = VelocityField(self.ndim, self.width, self.depth).to(self.device)
         ema = copy.deepcopy(model).eval().requires_grad_(False)
@@ -190,19 +184,14 @@ class ContinuousFlowMatching(BaseGenerator):
         self.model = ema
 
     def sample(self, n: int, seed: int) -> np.ndarray:
-        sampler = Sampler(self.model, self.n_steps).to(self.device)
+        sampler = Sampler(self.model, self.sampling_steps).to(self.device)
         batches = []
         with torch.no_grad():
             for start in range(0, n, 10_000):
-                noise = torch.randn(
-                    (min(10_000, n - start), self.ndim), device=self.device
-                )
+                noise = torch.randn((min(10_000, n - start), self.ndim), device=self.device)
                 batches.append(sampler(noise).cpu().numpy())
         samples = np.concatenate(batches) if batches else np.empty((0, self.ndim))
         return self.transform.inverse_transform(samples).astype(np.float32)
-
-    def _forward(self, values: np.ndarray) -> np.ndarray:
-        return values if self.transform is None else self.transform.transform(values)
 
     def _update_ema(self, ema: nn.Module, model: nn.Module) -> None:
         with torch.no_grad():
