@@ -21,9 +21,10 @@ class Particle:
 class BaseGenerator(ABC):
     """Contract shared by future model implementations."""
 
-    def __init__(self, particle: Particle, seed: int | None = None) -> None:
+    def __init__(self, particle: Particle, device: str, seed: int | None) -> None:
         self.ndim = particle.ndim
         self.Particle = particle
+        self.device = device
         if seed is not None:
             self.seed = seed
             torch.manual_seed(self.seed)
