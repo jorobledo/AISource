@@ -35,7 +35,7 @@ def test_is_a_base_generator(particle):
 def test_fit_and_sample_reproduce_the_data(particle, data):
     model = small_model(particle, steps=3_000, eval_every=1_000)
     model.fit(data[:1_800], data[1_800:])
-    samples = model.sample(2_000, seed=1)
+    samples = model.sample(2_000)
     assert samples.shape == (2_000, 2)
     assert model.val_losses[-1][1] < model.val_losses[0][1]
     assert np.all(samples >= data.min(axis=0) - 1e-5)
@@ -48,11 +48,11 @@ def test_sampling_is_reproducible_with_a_global_seed(particle, data):
     model = small_model(particle, steps=20, eval_every=10)
     model.fit(data[:1_800], data[1_800:])
     torch.manual_seed(3)
-    first = model.sample(100, seed=3)
+    first = model.sample(100)
     torch.manual_seed(3)
-    assert np.array_equal(first, model.sample(100, seed=3))
+    assert np.array_equal(first, model.sample(100))
     torch.manual_seed(4)
-    assert not np.array_equal(first, model.sample(100, seed=3))
+    assert not np.array_equal(first, model.sample(100))
 
 
 def test_losses_are_recorded_at_the_evaluation_steps(particle, data):
