@@ -34,7 +34,7 @@ class BaseGenerator(ABC):
         """Fit the model on the training split only."""
 
     @abstractmethod
-    def sample(self, n: int, seed: int) -> np.ndarray:
+    def sample(self, n: int) -> np.ndarray:
         """Generate ``n`` rows in the same feature order as the training data."""
 
     def _check_input_array(self, values: np.ndarray) -> np.ndarray:
