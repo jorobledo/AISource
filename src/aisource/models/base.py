@@ -25,7 +25,7 @@ class BaseGenerator(ABC):
         self.Particle = particle
 
     @abstractmethod
-    def fit(self, train: np.ndarray, validation: np.ndarray | None = None) -> None:
+    def fit(self, train: np.ndarray, validation: np.ndarray) -> None:
         """Fit the model on the training split only."""
 
     @abstractmethod
