@@ -1,6 +1,8 @@
-import numpy as np
 from __future__ import annotations
+
+import numpy as np
 from scipy.special import ndtr, ndtri
+
 
 class GaussRankTransform:
     """Per-feature rank transform to a standard normal with an interpolated inverse."""
@@ -27,5 +29,3 @@ class GaussRankTransform:
         for j in range(uniform.shape[1]):
             output[:, j] = np.interp(uniform[:, j], self.grid, self.sorted_columns[:, j])
         return output
-
-
