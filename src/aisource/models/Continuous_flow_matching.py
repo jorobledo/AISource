@@ -5,8 +5,6 @@ to transport standard normal noise to the training data. Sampling integrates
 the learned velocity field from ``t = 0`` to ``t = 1`` with explicit Euler
 steps. Features are mapped to a Gaussian space with a per-feature
 Gauss rank transform before training and mapped back after sampling.
-
-Requires PyTorch (``pip install aisource-neutrons[torch]``).
 """
 
 from __future__ import annotations
