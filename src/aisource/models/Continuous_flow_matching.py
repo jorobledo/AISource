@@ -3,7 +3,7 @@
 A velocity network is trained with the straight-line flow matching objective
 to transport standard normal noise to the training data. Sampling integrates
 the learned velocity field from ``t = 0`` to ``t = 1`` with explicit Euler
-steps. Features are optionally mapped to a Gaussian space with a per-feature
+steps. Features are mapped to a Gaussian space with a per-feature
 Gauss rank transform before training and mapped back after sampling.
 
 Requires PyTorch (``pip install aisource-neutrons[torch]``).
@@ -92,12 +92,12 @@ def flow_matching_loss(
 
 
 def sample_time(
-    batch_size: int, device: torch.device | str, generator: torch.Generator | None = None
+    batch_size: int, device: torch.device | str
 ) -> torch.Tensor:
     """Draw training times: 70% uniform, 20% near one, 10% near zero."""
 
     def uniform() -> torch.Tensor:
-        return torch.rand(batch_size, 1, device=device, generator=generator)
+        return torch.rand(batch_size, 1, device=device)
 
     mode = uniform()
     t_near_1 = 1.0 - uniform().pow(2)
@@ -157,24 +157,20 @@ class ContinuousFlowMatching(BaseGenerator):
         train_x = self._to_tensor(self._forward(train))
         val_x1 = self._to_tensor(self._forward(validation))
 
-        generator = torch.Generator(device=self.device).manual_seed(self.seed)
-        torch.manual_seed(self.seed)
         model = VelocityField(self.ndim, self.width, self.depth).to(self.device)
         ema = copy.deepcopy(model).eval().requires_grad_(False)
         optimizer = torch.optim.Adam(model.parameters(), lr=self.lr)
 
-        val_x0 = torch.randn(val_x1.shape, device=self.device, generator=generator)
-        val_t = torch.rand(len(val_x1), 1, device=self.device, generator=generator)
+        val_x0 = torch.randn(val_x1.shape, device=self.device)
+        val_t = torch.rand(len(val_x1), 1, device=self.device)
 
         self.losses, self.val_losses = [], []
         best_loss, best_state = float("inf"), copy.deepcopy(ema.state_dict())
         for step in range(self.steps):
-            index = torch.randint(
-                0, len(train_x), (self.batch_size,), device=self.device, generator=generator
-            )
+            index = torch.randint(0, len(train_x), (self.batch_size,), device=self.device)
             x1 = train_x[index]
-            x0 = torch.randn(x1.shape, device=self.device, generator=generator)
-            t = sample_time(self.batch_size, self.device, generator)
+            x0 = torch.randn(x1.shape, device=self.device)
+            t = sample_time(self.batch_size, self.device)
             loss = flow_matching_loss(model, x0, x1, t)
             optimizer.zero_grad()
             loss.backward()
@@ -194,28 +190,19 @@ class ContinuousFlowMatching(BaseGenerator):
         self.model = ema
 
     def sample(self, n: int, seed: int) -> np.ndarray:
-        if self.model is None:
-            raise RuntimeError("fit must be called before sample")
         sampler = Sampler(self.model, self.n_steps).to(self.device)
-        generator = torch.Generator(device=self.device).manual_seed(seed)
         batches = []
         with torch.no_grad():
             for start in range(0, n, 10_000):
                 noise = torch.randn(
-                    (min(10_000, n - start), self.ndim), device=self.device, generator=generator
+                    (min(10_000, n - start), self.ndim), device=self.device
                 )
                 batches.append(sampler(noise).cpu().numpy())
         samples = np.concatenate(batches) if batches else np.empty((0, self.ndim))
-        return self._inverse(samples).astype(np.float32)
+        return self.transform.inverse_transform(samples).astype(np.float32)
 
     def _forward(self, values: np.ndarray) -> np.ndarray:
         return values if self.transform is None else self.transform.transform(values)
-
-    def _inverse(self, values: np.ndarray) -> np.ndarray:
-        return values if self.transform is None else self.transform.inverse_transform(values)
-
-    def _to_tensor(self, values: np.ndarray) -> torch.Tensor:
-        return torch.as_tensor(values, dtype=torch.float32, device=self.device)
 
     def _update_ema(self, ema: nn.Module, model: nn.Module) -> None:
         with torch.no_grad():

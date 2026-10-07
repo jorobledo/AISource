@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 import numpy as np
+import torch
 
 
 class Particle:
@@ -20,9 +21,13 @@ class Particle:
 class BaseGenerator(ABC):
     """Contract shared by future model implementations."""
 
-    def __init__(self, particle: Particle) -> None:
+    def __init__(self, particle: Particle, seed: int | None = None) -> None:
         self.ndim = particle.ndim
         self.Particle = particle
+        self.generator = torch.Generator(device=self.device).
+        if seed is not None:
+            self.seed = seed
+            torch.manual_seed(self.seed)
 
     @abstractmethod
     def fit(self, train: np.ndarray, validation: np.ndarray) -> None:
@@ -39,3 +44,6 @@ class BaseGenerator(ABC):
         if not np.isfinite(values).all():
             raise ValueError("data must contain only finite values")
         return values
+    
+    def _to_tensor(self, values: np.ndarray) -> torch.Tensor:
+        return torch.as_tensor(values, dtype=torch.float32, device=self.device)
