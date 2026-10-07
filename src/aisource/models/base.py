@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 import numpy as np
+import torch
 
 
 class Particle:
@@ -20,14 +21,31 @@ class Particle:
 class BaseGenerator(ABC):
     """Contract shared by future model implementations."""
 
-    def __init__(self, particle: Particle) -> None:
+    def __init__(self, particle: Particle, device: str, seed: int | None) -> None:
         self.ndim = particle.ndim
         self.Particle = particle
+        self.device = device
+        if seed is not None:
+            self.seed = seed
+            torch.manual_seed(self.seed)
 
     @abstractmethod
-    def fit(self, train: np.ndarray, validation: np.ndarray | None = None) -> None:
+    def fit(self, train: np.ndarray, validation: np.ndarray) -> None:
         """Fit the model on the training split only."""
 
     @abstractmethod
-    def sample(self, n: int, seed: int) -> np.ndarray:
+    def sample(self, n: int) -> np.ndarray:
         """Generate ``n`` rows in the same feature order as the training data."""
+
+    def _check_input_array(self, values: np.ndarray) -> np.ndarray:
+        values = np.asarray(values, dtype=np.float64)
+        if values.ndim != 2 or values.shape[1] != self.ndim:
+            raise ValueError(
+                f"expected an array with shape (n, {self.ndim}), instead got {values.shape}"
+            )
+        if not np.isfinite(values).all():
+            raise ValueError("data must contain only finite values")
+        return values
+
+    def _to_tensor(self, values: np.ndarray) -> torch.Tensor:
+        return torch.as_tensor(values, dtype=torch.float32, device=self.device)
