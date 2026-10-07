@@ -146,26 +146,16 @@ class ContinuousFlowMatching(BaseGenerator):
         self.gauss_rank = gauss_rank
         self.device = device
         self.seed = seed
-        self.model: VelocityField | None = None
-        self.transform: GaussRankTransform | None = None
         self.losses: list[float] = []
         self.val_losses: list[tuple[int, float]] = []
 
-    def fit(self, train: np.ndarray, validation: np.ndarray | None = None) -> None:
+    def fit(self, train: np.ndarray, validation: np.ndarray) -> None:
         train = self._check(train)
-        if validation is not None:
-            validation = self._check(validation)
+        validation = self._check(validation)
 
-        self.transform = GaussRankTransform().fit(train) if self.gauss_rank else None
+        self.transform = GaussRankTransform().fit(train)
         train_x = self._to_tensor(self._forward(train))
-        if validation is None:
-            holdout = min(self.val_size, max(1, len(train_x) // 10))
-            order = torch.randperm(
-                len(train_x), generator=torch.Generator().manual_seed(self.seed)
-            ).to(self.device)
-            val_x1, train_x = train_x[order[:holdout]], train_x[order[holdout:]]
-        else:
-            val_x1 = self._to_tensor(self._forward(validation))
+        val_x1 = self._to_tensor(self._forward(validation))
 
         generator = torch.Generator(device=self.device).manual_seed(self.seed)
         torch.manual_seed(self.seed)
@@ -217,14 +207,6 @@ class ContinuousFlowMatching(BaseGenerator):
                 batches.append(sampler(noise).cpu().numpy())
         samples = np.concatenate(batches) if batches else np.empty((0, self.ndim))
         return self._inverse(samples).astype(np.float32)
-
-    def _check(self, values: np.ndarray) -> np.ndarray:
-        values = np.asarray(values, dtype=np.float64)
-        if values.ndim != 2 or values.shape[1] != self.ndim:
-            raise ValueError(f"expected an array with shape (n, {self.ndim})")
-        if not np.isfinite(values).all():
-            raise ValueError("data must contain only finite values")
-        return values
 
     def _forward(self, values: np.ndarray) -> np.ndarray:
         return values if self.transform is None else self.transform.transform(values)
