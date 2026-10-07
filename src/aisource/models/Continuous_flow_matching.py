@@ -127,7 +127,7 @@ class ContinuousFlowMatching(BaseGenerator):
         device: str = "cpu",
         seed: int | None = None,
     ) -> None:
-        super().__init__(particle)
+        super().__init__(particle, seed)
         self.width = width
         self.depth = depth
         self.sampling_steps = sampling_steps
@@ -137,7 +137,6 @@ class ContinuousFlowMatching(BaseGenerator):
         self.ema_decay = ema_decay
         self.eval_every = eval_every
         self.device = device
-        self.seed = seed
         self.losses: list[float] = []
         self.val_losses: list[tuple[int, float]] = []
 
@@ -181,7 +180,7 @@ class ContinuousFlowMatching(BaseGenerator):
         ema.load_state_dict(best_state)
         self.model = ema
 
-    def sample(self, n: int, seed: int) -> np.ndarray:
+    def sample(self, n: int) -> np.ndarray:
         sampler = Sampler(self.model, self.sampling_steps).to(self.device)
         batches = []
         with torch.no_grad():
