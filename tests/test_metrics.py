@@ -7,6 +7,7 @@ from aisource.metrics import (
     energy_distance,
     evaluate,
     gauss_rank_transform,
+    js_distance,
     kl_divergence,
     mmd_rbf,
 )
@@ -63,6 +64,7 @@ def test_evaluate_returns_documented_suite(samples):
         "c2st_pvalue",
         "energy_distance",
         "kl_divergence",
+        "js_distance",
     }
 
 
@@ -93,6 +95,7 @@ def test_metrics_class_supports_bound_and_per_call_samples(samples):
         "c2st_pvalue",
         "energy_distance",
         "kl_divergence",
+        "js_distance",
     }
 
 
@@ -159,3 +162,33 @@ def test_kl_divergence_in_original_space_matches_gaussian_closed_form():
     assert kl_divergence(reference, shifted, space="original") == pytest.approx(0.375, abs=0.1)
     with pytest.raises(ValueError, match="space"):
         kl_divergence(reference, shifted, space="uniform")
+
+
+@pytest.mark.parametrize("space", ["gaussian", "original"])
+def test_js_distance_detects_shift_and_is_bounded(samples, space):
+    reference, matching, shifted = samples
+    matched = js_distance(reference, matching, space=space)
+    far = js_distance(reference, shifted, space=space)
+    assert 0.0 <= matched < 0.2 < far <= np.sqrt(np.log(2.0))
+    assert js_distance(shifted, reference, space=space) == pytest.approx(far, abs=0.05)
+
+
+def test_js_distance_in_original_space_matches_gaussian_reference_value():
+    rng = np.random.default_rng(3)
+    reference = rng.normal(size=(4000, 3))
+    shifted = rng.normal(loc=1.5, size=(4000, 3))
+    # JS divergence 0.4605 from a Monte Carlo integral of the known densities
+    assert js_distance(reference, shifted, space="original") == pytest.approx(
+        np.sqrt(0.4605), abs=0.03
+    )
+
+
+def test_js_distance_dispatch_and_validation(samples):
+    reference, matching, _ = samples
+    assert Metrics(reference, matching).evaluate("js") == js_distance(
+        reference, matching, max_samples=2_000
+    )
+    with pytest.raises(ValueError, match="space"):
+        js_distance(reference, matching, space="uniform")
+    with pytest.raises(ValueError, match="neighbours"):
+        js_distance(reference, matching, space="original", neighbours=600)

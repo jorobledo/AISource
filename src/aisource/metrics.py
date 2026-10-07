@@ -17,7 +17,7 @@ import numpy as np
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
 from scipy.special import ndtri
-from scipy.stats import binomtest
+from scipy.stats import binomtest, multivariate_normal
 
 _METRIC_ALIASES = {
     "mmd": "mmd_rbf",
@@ -28,6 +28,9 @@ _METRIC_ALIASES = {
     "energy_distance": "energy_distance",
     "kld": "kl_divergence",
     "kl_divergence": "kl_divergence",
+    "js": "js_distance",
+    "js_distance": "js_distance",
+    "jensen_shannon_distance": "js_distance",
     "all": "all",
 }
 
@@ -272,6 +275,22 @@ def _gaussian_fit(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return mean, centered.T @ centered / (len(values) - 1)
 
 
+def _gauss_rank_fits(
+    reference: np.ndarray, generated: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
+    transformed_reference = gauss_rank_transform(reference, reference)
+    transformed_generated = gauss_rank_transform(reference, generated)
+    fit_p = _gaussian_fit(transformed_reference)
+    fit_q = _gaussian_fit(transformed_generated)
+    dimension = reference.shape[1]
+    if min(np.linalg.matrix_rank(fit_p[1]), np.linalg.matrix_rank(fit_q[1])) < dimension:
+        raise ValueError(
+            "covariance matrix is singular; use more particles than parameters "
+            "and avoid perfectly collinear parameters"
+        )
+    return transformed_reference, transformed_generated, fit_p, fit_q
+
+
 def _knn_kl_divergence(reference: np.ndarray, generated: np.ndarray) -> float:
     count, dimension = reference.shape
     to_reference = cKDTree(reference).query(reference, k=2)[0][:, 1]
@@ -323,17 +342,9 @@ def kl_divergence(
         return _knn_kl_divergence(reference, generated)
     if space != "gaussian":
         raise ValueError("space must be 'gaussian' or 'original'")
-    transformed_reference = gauss_rank_transform(reference, reference)
-    transformed_generated = gauss_rank_transform(reference, generated)
+    _, _, (mean_p, cov_p), (mean_q, cov_q) = _gauss_rank_fits(reference, generated)
 
     dimension = reference.shape[1]
-    mean_p, cov_p = _gaussian_fit(transformed_reference)
-    mean_q, cov_q = _gaussian_fit(transformed_generated)
-    if np.linalg.matrix_rank(cov_p) < dimension or np.linalg.matrix_rank(cov_q) < dimension:
-        raise ValueError(
-            "covariance matrix is singular; use more particles than parameters "
-            "and avoid perfectly collinear parameters"
-        )
     _, logdet_p = np.linalg.slogdet(cov_p)
     _, logdet_q = np.linalg.slogdet(cov_q)
 
@@ -341,6 +352,79 @@ def kl_divergence(
     trace = np.trace(np.linalg.solve(cov_q, cov_p))
     mahalanobis = delta @ np.linalg.solve(cov_q, delta)
     return float(0.5 * (trace + mahalanobis - dimension + logdet_q - logdet_p))
+
+
+def js_distance(
+    reference: np.ndarray,
+    generated: np.ndarray,
+    *,
+    max_samples: int | None = None,
+    seed: int = 17,
+    space: Literal["gaussian", "original"] = "gaussian",
+    neighbours: int = 50,
+) -> float:
+    """Return the Jensen-Shannon distance, the square root of the JS divergence in nats.
+
+    The JS divergence is ``0.5 KL(P || M) + 0.5 KL(Q || M)`` with the mixture
+    ``M = (P + Q) / 2``. It is symmetric and bounded, so the distance lies in
+    ``[0, sqrt(ln 2)]``, with 0 for identical distributions. Estimates below
+    zero, which finite samples can give, are clipped to zero.
+
+    With ``space="gaussian"`` both samples are Gauss rank transformed with the
+    empirical CDFs of the reference and a multivariate Gaussian is fitted to
+    each, as in :func:`kl_divergence`. The mixture has no closed form, so the
+    expectations are averaged over the transformed samples themselves.
+
+    With ``space="original"`` the untransformed samples are pooled and, for
+    every particle, the ``neighbours`` nearest particles in the pooled sample
+    are counted per sample. The counts, normalized by sample size, estimate
+    ``P / (P + Q)`` at that particle, following the nearest-neighbour ratio
+    estimator of M. Noshad, K. R. Moon, S. Yasaei Sekeh and A. O. Hero,
+    "Direct Estimation of Information Divergence Using Nearest Neighbor
+    Ratios", IEEE ISIT 2017, doi:10.1109/ISIT.2017.8006659. The estimate is
+    biased towards zero in many dimensions; more ``neighbours`` lowers the
+    bias for similar samples. Sampling in the original space may be slow, as it
+    needs a nearest-neighbour search for every particle; use ``max_samples`` to
+    limit the cost.
+    """
+
+    reference, generated = _prepare_pair(
+        reference,
+        generated,
+        max_samples=max_samples,
+        seed=seed,
+        standardize=False,
+    )
+    if space == "original":
+        divergence = _knn_js_divergence(reference, generated, neighbours)
+    elif space == "gaussian":
+        transformed_p, transformed_q, fit_p, fit_q = _gauss_rank_fits(reference, generated)
+        p = multivariate_normal(*fit_p)
+        q = multivariate_normal(*fit_q)
+        log_p, log_q = p.logpdf(transformed_p), q.logpdf(transformed_p)
+        half_p = np.mean(log_p - np.logaddexp(log_p, log_q))
+        log_p, log_q = p.logpdf(transformed_q), q.logpdf(transformed_q)
+        half_q = np.mean(log_q - np.logaddexp(log_p, log_q))
+        divergence = np.log(2.0) + 0.5 * (half_p + half_q)
+    else:
+        raise ValueError("space must be 'gaussian' or 'original'")
+    return float(np.sqrt(max(divergence, 0.0)))
+
+
+def _knn_js_divergence(reference: np.ndarray, generated: np.ndarray, neighbours: int) -> float:
+    if not 1 <= neighbours < min(len(reference), len(generated)):
+        raise ValueError("neighbours must be at least one and smaller than each sample")
+    count_p, count_q = len(reference), len(generated)
+    pooled = np.concatenate((reference, generated))
+    from_p = np.arange(len(pooled)) < count_p
+    nearest = cKDTree(pooled).query(pooled, k=neighbours + 1)[1][:, 1:]
+    hits_p = from_p[nearest].sum(axis=1)
+    rate_p = (hits_p + 0.5) / (count_p - from_p)
+    rate_q = (neighbours - hits_p + 0.5) / (count_q - ~from_p)
+    share_p = rate_p / (rate_p + rate_q)
+    return float(
+        np.log(2.0) + 0.5 * (np.log(share_p[from_p]).mean() + np.log(1.0 - share_p[~from_p]).mean())
+    )
 
 
 def evaluate(
@@ -370,6 +454,7 @@ def evaluate(
             reference, generated, max_samples=max_samples, seed=seed
         ),
         "kl_divergence": kl_divergence(reference, generated, max_samples=max_samples, seed=seed),
+        "js_distance": js_distance(reference, generated, max_samples=max_samples, seed=seed),
     }
 
 
@@ -391,7 +476,14 @@ class Metrics:
     can also be overridden for an individual evaluation.
     """
 
-    available_metrics = ("mmd_rbf", "c2st", "energy_distance", "kl_divergence", "all")
+    available_metrics = (
+        "mmd_rbf",
+        "c2st",
+        "energy_distance",
+        "kl_divergence",
+        "js_distance",
+        "all",
+    )
 
     def __init__(
         self,
@@ -420,8 +512,8 @@ class Metrics:
         """Evaluate ``metric`` for the supplied or instance-bound samples.
 
         Supported names are ``"mmd"``/``"mmd_rbf"``, ``"c2st"``,
-        ``"energy"``/``"energy_distance"``, ``"kld"``/``"kl_divergence"``, and
-        ``"all"``.
+        ``"energy"``/``"energy_distance"``, ``"kld"``/``"kl_divergence"``,
+        ``"js"``/``"js_distance"``/``"jensen_shannon_distance"``, and ``"all"``.
         """
 
         reference = self.reference if reference is None else reference
@@ -447,6 +539,8 @@ class Metrics:
             return energy_distance(reference, generated, **kwargs)
         if selected == "kl_divergence":
             return kl_divergence(reference, generated, **kwargs)
+        if selected == "js_distance":
+            return js_distance(reference, generated, **kwargs)
         return evaluate(reference, generated, **kwargs)
 
     def evaluate_all(
