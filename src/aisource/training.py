@@ -16,4 +16,3 @@ def train_model(
 
     model.fit(train, validation)
     return model
-

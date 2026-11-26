@@ -3,4 +3,5 @@
 from .base import BaseGenerator, Particle
 from .Continuous_flow_matching import ContinuousFlowMatching
 from .nsf import NSFlow
-__all__ = ["BaseGenerator", "Particle", "NSFlow", "ContinuousFlowMatching"]
+
+__all__ = ["BaseGenerator", "ContinuousFlowMatching", "NSFlow", "Particle"]
