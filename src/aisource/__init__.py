@@ -3,5 +3,5 @@
 from ._version import __version__
 from .benchmark import run_benchmark
 from .metrics import Metrics
-
+from .models import Particle, BaseGenerator, NSFlow, ContinuousFlowMatching
 __all__ = ["Metrics", "__version__", "run_benchmark"]
