@@ -15,13 +15,13 @@ otro es incondicional, p(z), y se evalúa como `self.flow()`. `nll` devuelve la
 verosimilitud negativa media ponderada por los pesos del MCPL en el espacio
 estandarizado del self.flow (sin offset del cambio de variable).
 """
-from time import time
+import time
 
 import torch
 import zuko
 from zuko.lazy import Flow, UnconditionalTransform
 from zuko.transforms import AffineTransform, SigmoidTransform
-from base import BaseGenerator, Particle
+from .base import BaseGenerator, Particle
 import numpy as np
 from torch.utils.data import DataLoader
 import math
@@ -39,7 +39,7 @@ class NSFlow(BaseGenerator):
         self.flow_z = self.construir(
             self.ndim -1, bounds=self.bounds).to(self.device)
         self.flow_phi = self.construir(
-            1, context=self.dim -1, bounds=self.bounds).to(self.device)
+            1, context=self.ndim -1, bounds=self.bounds).to(self.device)
 
     def prep(self, nsf, bounds):
         """Antepone min-max -> logit al NSF para confinar su salida a (a, b) por dimensión.
@@ -71,7 +71,7 @@ class NSFlow(BaseGenerator):
         }
         if arch == "NSF":
             nsf = zuko.flows.NSF(dim, bins=bins, **comun)
-            return nsf if bounds is None else self._acotar(nsf, bounds)
+            return nsf if bounds is None else self.prep(nsf, bounds)
         if arch == "NCSF":
             return zuko.flows.NCSF(dim, bins=bins, **comun)
         if arch == "MAF":
@@ -84,29 +84,30 @@ class NSFlow(BaseGenerator):
         """Cantidad de parámetros entrenables del self.flow."""
         return sum(p.numel() for p in self.flow.parameters() if p.requires_grad)
 
-    def flog_prob(self, z, phi, circular):
+    def flog_prob(self, flow,z, phi, circular):
         """log p de un batch. El modelo circular es p(phi | z), el otro es p(z)."""
         if circular:
-            return self.flow(z).sel.flog_prob(phi)
-        return self.flow().sel.flog_prob(z)
+            return flow(z).log_prob(phi)
+        return flow().log_prob(z)
 
     @torch.no_grad()
-    def nll(self, particulas, circular):
+    def nll(self, flow, particulas, circular):
         """NLL media de una partición, ponderada por los pesos (espacio estandarizado).
 
         Suma -log p pesado por w y divide por la suma de pesos. Mueve los tensores al
         device del self.flow, así corre en GPU si el self.flow está en GPU.
         """
-        self.flow.eval()
-        device = next(self.flow.parameters()).device
+        flow.eval()
+        device = next(flow.parameters()).device
         z = particulas.z.to(device)
         phi = particulas.phi.to(device)
         w = particulas.w.to(device)
         nll_p = float(
-            (-self.sel.flog_prob(self.flow, z, phi, circular) * w).sum())
+            (-self.flog_prob(flow, z, phi, circular) * w).sum())
         return nll_p / float(w.sum())
 
-    def fit(self,
+    def _fit(self,
+             flow,
             train: np.ndarray,
             validation: np.ndarray,
             epochs: int = 100,
@@ -121,20 +122,20 @@ class NSFlow(BaseGenerator):
         self.epochs = epochs
         self.batch_size = batch_size
         self.lr = lr
-        train = self._check_input_array(train)
-        train = self._to_tensor(train)
-        validation = self._check_input_array(validation)
-        validation = self._to_tensor(validation)
+        #train = self._check_input_array(train)
+        #train = self._to_tensor(train)
+        #validation = self._check_input_array(validation)
+        #validation = self._to_tensor(validation)
         self.wgt_dc = wgt_dc
         self.seed = seed
         self.circ = circular
 
-        self.device = next(self.flow.parameters()).device
+        self.device = next(flow.parameters()).device
         train_loader = DataLoader(train, batch_size=int(batch_size),
                                   shuffle=True,
                                   generator=torch.Generator().manual_seed(seed))
 
-        opt = torch.optim.Adam(self.flow.parameters(),
+        opt = torch.optim.Adam(flow.parameters(),
                                lr=lr,
                                weight_decay=wgt_dc)
 
@@ -146,12 +147,12 @@ class NSFlow(BaseGenerator):
         history = []
         t0 = time.time()
         for epoca in range(epochs):
-            self.flow.train()
+            flow.train()
             sum_loss, sum_w = 0.0, 0.0
             for zb, phib, wb in train_loader:
                 zb, phib, wb = zb.to(self.device), phib.to(
                     self.device), wb.to(self.device)
-                loss = -(self.flog_prob(self.flow, zb, phib,
+                loss = -(self.flog_prob(flow, zb, phib,
                          circular) * wb).sum() / wb.sum()
                 loss.backward()
                 opt.step()
@@ -160,8 +161,8 @@ class NSFlow(BaseGenerator):
                 sum_loss += float(loss.detach()) * float(wb.sum())
                 sum_w += float(wb.sum())
             train_nll = sum_loss / sum_w
-            val_nll = self.nll(self.flow, validation, circular)
-            lr = opt.group_params[0]["lr"]
+            val_nll = self.nll(flow, validation, circular)
+            lr = self.lr
             history.append({"epoca": epoca, "train_nll": train_nll,
                             "val_nll": val_nll, "lr": lr, 'time': time.time() - t0})
             if verbose:
@@ -171,7 +172,7 @@ class NSFlow(BaseGenerator):
             if val_nll < best - 1e-5:
                 best, best_epoch = val_nll, epoca
                 best_state = {k: v.detach().cpu().clone()
-                              for k, v in self.flow.state_dict().items()}
+                              for k, v in flow.state_dict().items()}
                 no_improvement = 0
             else:
                 no_improvement += 1
@@ -183,6 +184,18 @@ class NSFlow(BaseGenerator):
         print(f"\nbest validation NLL = {best:+.6f} (epoch {best_epoch})"
               f"in {time.time() - t0:.0f} s")
         return best_state, history
+    def fit(self,
+            train: np.ndarray,
+            validation: np.ndarray,
+            epochs: int = 100,
+            batch_size: int = 32,
+            wgt_dc: float = 0.0,
+            seed: int = 0,
+            verbose: bool = True,
+            patience: int = 20,
+            lr: float = 1e-3) -> None:
+        _=self._fit(self.flow_z, train, validation, epochs, batch_size, wgt_dc, seed, False,verbose, patience, lr)
+        _p = self._fit(self.flow_phi, train, validation, epochs, batch_size, wgt_dc, seed, True, verbose, patience, lr)
 
     @torch.no_grad()
     def sample(self, n: int) -> np.ndarray:
