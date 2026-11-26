@@ -1,5 +1,6 @@
 """Continuous flow matching generator for particle phase space.
 
+
 A velocity network is trained with the straight-line flow matching objective
 to transport standard normal noise to the training data. Sampling integrates
 the learned velocity field from ``t = 0`` to ``t = 1`` with explicit Euler
@@ -70,7 +71,9 @@ class Sampler(nn.Module):
         super().__init__()
         self.velocity = velocity_model
         self.n_steps = n_steps
-        self.register_buffer("time_table", torch.linspace(0, 1, n_steps).view(n_steps, 1, 1))
+        self.register_buffer(
+            "time_table", torch.linspace(0, 1, n_steps).view(n_steps, 1, 1)
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         dt = 1.0 / self.n_steps
@@ -98,7 +101,9 @@ def sample_time(batch_size: int, device: torch.device | str) -> torch.Tensor:
     mode = uniform()
     t_near_1 = 1.0 - uniform().pow(2)
     t_near_0 = uniform().pow(2)
-    return torch.where(mode < 0.70, uniform(), torch.where(mode < 0.90, t_near_1, t_near_0))
+    return torch.where(
+        mode < 0.70, uniform(), torch.where(mode < 0.90, t_near_1, t_near_0)
+    )
 
 
 class ContinuousFlowMatching(BaseGenerator):
@@ -158,7 +163,9 @@ class ContinuousFlowMatching(BaseGenerator):
         self.losses, self.val_losses = [], []
         best_loss, best_state = float("inf"), copy.deepcopy(ema.state_dict())
         for step in range(self.steps):
-            index = torch.randint(0, len(train_x), (self.batch_size,), device=self.device)
+            index = torch.randint(
+                0, len(train_x), (self.batch_size,), device=self.device
+            )
             x1 = train_x[index]
             x0 = torch.randn(x1.shape, device=self.device)
             t = sample_time(self.batch_size, self.device)
@@ -185,7 +192,9 @@ class ContinuousFlowMatching(BaseGenerator):
         batches = []
         with torch.no_grad():
             for start in range(0, n, 10_000):
-                noise = torch.randn((min(10_000, n - start), self.ndim), device=self.device)
+                noise = torch.randn(
+                    (min(10_000, n - start), self.ndim), device=self.device
+                )
                 batches.append(sampler(noise).cpu().numpy())
         samples = np.concatenate(batches) if batches else np.empty((0, self.ndim))
         return self.transform.inverse_transform(samples).astype(np.float32)

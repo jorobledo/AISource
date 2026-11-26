@@ -11,9 +11,8 @@ import torch
 class Particle:
     """Describe the phase-space features associated with a particle type."""
 
-    def __init__(self, phase_space_dict: dict[str, object], particle_type: str) -> None:
-        self.phase_space_dict = phase_space_dict
-        self.training_phase_space = list(phase_space_dict.keys())
+    def __init__(self, training_phase_space: list[str], particle_type: str) -> None:
+        self.training_phase_space = training_phase_space
         self.ndim = len(self.training_phase_space)
         self.particle_type = particle_type
 

@@ -37,4 +37,3 @@ def run_benchmark(config_or_path: dict[str, Any] | str | Path) -> dict[str, Any]
     # TODO: Generate neutrons and calculate the agreed metrics.
     # TODO: Save a reproducible report and artifacts.
     raise NotImplementedError("benchmark execution has not been implemented yet")
-

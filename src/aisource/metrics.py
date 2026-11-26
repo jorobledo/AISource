@@ -184,7 +184,9 @@ def c2st(
     values = np.concatenate((reference, generated))
     labels = np.concatenate((np.zeros(count, dtype=int), np.ones(count, dtype=int)))
     if folds < 2 or folds > count:
-        raise ValueError("folds must be between two and the per-distribution sample count")
+        raise ValueError(
+            "folds must be between two and the per-distribution sample count"
+        )
 
     if classifier == "logistic":
         model = make_pipeline(
@@ -222,7 +224,9 @@ def c2st(
     return {
         "accuracy": float(accuracy_score(labels, prediction)),
         "roc_auc": float(roc_auc_score(labels, probability)),
-        "pvalue": float(binomtest(correct, len(labels), 0.5, alternative="greater").pvalue),
+        "pvalue": float(
+            binomtest(correct, len(labels), 0.5, alternative="greater").pvalue
+        ),
     }
 
 
@@ -277,13 +281,18 @@ def _gaussian_fit(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 def _gauss_rank_fits(
     reference: np.ndarray, generated: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
+) -> tuple[
+    np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]
+]:
     transformed_reference = gauss_rank_transform(reference, reference)
     transformed_generated = gauss_rank_transform(reference, generated)
     fit_p = _gaussian_fit(transformed_reference)
     fit_q = _gaussian_fit(transformed_generated)
     dimension = reference.shape[1]
-    if min(np.linalg.matrix_rank(fit_p[1]), np.linalg.matrix_rank(fit_q[1])) < dimension:
+    if (
+        min(np.linalg.matrix_rank(fit_p[1]), np.linalg.matrix_rank(fit_q[1]))
+        < dimension
+    ):
         raise ValueError(
             "covariance matrix is singular; use more particles than parameters "
             "and avoid perfectly collinear parameters"
@@ -398,7 +407,9 @@ def js_distance(
     if space == "original":
         divergence = _knn_js_divergence(reference, generated, neighbours)
     elif space == "gaussian":
-        transformed_p, transformed_q, fit_p, fit_q = _gauss_rank_fits(reference, generated)
+        transformed_p, transformed_q, fit_p, fit_q = _gauss_rank_fits(
+            reference, generated
+        )
         p = multivariate_normal(*fit_p)
         q = multivariate_normal(*fit_q)
         log_p, log_q = p.logpdf(transformed_p), q.logpdf(transformed_p)
@@ -411,7 +422,9 @@ def js_distance(
     return float(np.sqrt(max(divergence, 0.0)))
 
 
-def _knn_js_divergence(reference: np.ndarray, generated: np.ndarray, neighbours: int) -> float:
+def _knn_js_divergence(
+    reference: np.ndarray, generated: np.ndarray, neighbours: int
+) -> float:
     if not 1 <= neighbours < min(len(reference), len(generated)):
         raise ValueError("neighbours must be at least one and smaller than each sample")
     count_p, count_q = len(reference), len(generated)
@@ -423,7 +436,8 @@ def _knn_js_divergence(reference: np.ndarray, generated: np.ndarray, neighbours:
     rate_q = (neighbours - hits_p + 0.5) / (count_q - ~from_p)
     share_p = rate_p / (rate_p + rate_q)
     return float(
-        np.log(2.0) + 0.5 * (np.log(share_p[from_p]).mean() + np.log(1.0 - share_p[~from_p]).mean())
+        np.log(2.0)
+        + 0.5 * (np.log(share_p[from_p]).mean() + np.log(1.0 - share_p[~from_p]).mean())
     )
 
 
@@ -446,15 +460,21 @@ def evaluate(
         seed=seed,
     )
     return {
-        "mmd_rbf_squared": mmd_rbf(reference, generated, max_samples=max_samples, seed=seed),
+        "mmd_rbf_squared": mmd_rbf(
+            reference, generated, max_samples=max_samples, seed=seed
+        ),
         "c2st_accuracy": classifier_result["accuracy"],
         "c2st_roc_auc": classifier_result["roc_auc"],
         "c2st_pvalue": classifier_result["pvalue"],
         "energy_distance": energy_distance(
             reference, generated, max_samples=max_samples, seed=seed
         ),
-        "kl_divergence": kl_divergence(reference, generated, max_samples=max_samples, seed=seed),
-        "js_distance": js_distance(reference, generated, max_samples=max_samples, seed=seed),
+        "kl_divergence": kl_divergence(
+            reference, generated, max_samples=max_samples, seed=seed
+        ),
+        "js_distance": js_distance(
+            reference, generated, max_samples=max_samples, seed=seed
+        ),
     }
 
 
@@ -519,7 +539,9 @@ class Metrics:
         reference = self.reference if reference is None else reference
         generated = self.generated if generated is None else generated
         if reference is None or generated is None:
-            raise ValueError("reference and generated must be supplied to Metrics or evaluate")
+            raise ValueError(
+                "reference and generated must be supplied to Metrics or evaluate"
+            )
         if not isinstance(metric, str):
             raise TypeError("metric must be a string")
         normalized = metric.lower().replace("-", "_")
@@ -527,7 +549,9 @@ class Metrics:
             selected = _METRIC_ALIASES[normalized]
         except KeyError as error:
             choices = ", ".join(self.available_metrics)
-            raise ValueError(f"unknown metric {metric!r}; choose one of: {choices}") from error
+            raise ValueError(
+                f"unknown metric {metric!r}; choose one of: {choices}"
+            ) from error
 
         kwargs.setdefault("seed", self.seed)
         kwargs.setdefault("max_samples", self.max_samples)
