@@ -1,5 +1,6 @@
 """Continuous flow matching generator for particle phase space.
 
+
 A velocity network is trained with the straight-line flow matching objective
 to transport standard normal noise to the training data. Sampling integrates
 the learned velocity field from ``t = 0`` to ``t = 1`` with explicit Euler
